@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from __future__ import print_function
 import h5py
 import numpy as np
@@ -55,3 +56,57 @@ def plink_to_hdf5(tped_file, tfam_file, hdf5_file,N,M):
 
 plink_to_hdf5("../Transpose_data/QC_PASS.CD.1trans.tped", "../Transpose_data/QC_PASS.CD.1trans.tfam", "First_try.h5",N= 4321, M=11856)
 #plink_to_hdf5("../risk_prediction/celiac_disease_data/Celiac_disease_trans.tped", "../risk_prediction/celiac_disease_data/Celiac_disease_trans.tfam", "First_try.h5",N= 11950, M=524193)
+
+
+
+def bed_plink_to_hdf5(genotype_file, out_hdf5_file):
+	"""
+	Note: It may not support all PLINK files for now.
+	"""
+	
+	plinkf = plinkfile.PlinkFile(genotype_file)
+	samples = plinkf.get_samples()
+	
+	affections = []
+	phens = []
+	iids = []
+	fids = []
+	
+	for samp_i, sample in enumerate(samples):
+		iids.append(sample.iid)
+		fids.append(sample.fid)
+		affections.append(sample.affection)
+		phens.append(sample.phenotype)
+				
+	num_individs = len(iids)
+	if sp.any(sp.isnan(true_phens)):
+		print('Phenotypes appear to have some NaNs, or perhaps parsing failed?')
+	else:
+		print('%d individuals have phenotype and genotype information.' % num_individs)
+	
+	# If these indices are not in order then we place them in the right place while parsing SNPs.
+	print('Iterating over BED file.')
+	oh5f = h5py.File(out_hdf5_file)
+	# First construct chromosome groups.
+	
+	# Then iterate through the plink file.
+	locus_list = plinkf.get_loci()
+	snp_i = 0
+	for locus, row in it.izip(locus_list, plinkf):
+		sid = locus.name
+		nts = [locus.allele1, locus.allele2]
+
+		# Parse SNP, and fill in the blanks if necessary.
+		snp = sp.array(row, dtype='int8')[indiv_filter]
+		bin_counts = row.allele_counts()
+		if bin_counts[-1] > 0:
+			mode_v = sp.argmax(bin_counts[:2])
+			snp[snp == 3] = mode_v
+		
+		# Store data in HDF5 file
+
+	plinkf.close()
+
+
+plink_to_hdf5("../Transpose_data/QC_PASS.CD.1trans.tped", "../Transpose_data/QC_PASS.CD.1trans.tfam", "First_try.h5")
+
