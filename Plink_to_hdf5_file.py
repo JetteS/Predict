@@ -57,7 +57,7 @@ def plink_to_hdf5(tped_file, tfam_file, hdf5_file, N, M):
 # plink_to_hdf5("../Transpose_data/QC_PASS.CD.1trans.tped", "../Transpose_data/QC_PASS.CD.1trans.tfam", "First_try.h5", N=4321, M=11856)
 # plink_to_hdf5("../risk_prediction/celiac_disease_data/Celiac_disease_trans.tped", "../risk_prediction/celiac_disease_data/Celiac_disease_trans.tfam", "First_try.h5",N= 11950, M=524193)
 
-
+from plinkio import plinkfile
 
 def bed_plink_to_hdf5(genotype_file, out_hdf5_file):
 	"""
