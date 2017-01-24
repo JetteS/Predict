@@ -60,7 +60,7 @@ def plink_to_hdf5(tped_file, tfam_file, hdf5_file, N, M):
 from plinkio import plinkfile
 import scipy as sp
 
-def bed_plink_to_hdf5(genotype_file, out_hdf5_file):
+def bed_plink_to_hdf5(genotype_file, out_hdf5_file, indiv_filter=None):
 	"""
 	Note: It may not support all PLINK files for now.
 	"""
@@ -127,7 +127,10 @@ def bed_plink_to_hdf5(genotype_file, out_hdf5_file):
 		positions.append(locus.position)
 		
 		# Parse SNP, and fill in the blanks if necessary.
-		snp = sp.array(row, dtype='int8')[indiv_filter]
+		if indiv_filter is not None:
+			snp = sp.array(row, dtype='int8')[indiv_filter]
+		else:
+			snp = sp.array(row, dtype='int8')
 		bin_counts = row.allele_counts()
 		if bin_counts[-1] > 0:
 			mode_v = sp.argmax(bin_counts[:2])
