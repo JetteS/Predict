@@ -144,5 +144,5 @@ def bed_plink_to_hdf5(genotype_file, out_hdf5_file):
 	plinkf.close()
 	oh5f.close()
 
-plink_to_hdf5("../Transpose_data/QC_PASS.CD.1trans.tped", "../Transpose_data/QC_PASS.CD.1trans.tfam", "First_try.h5")
+# plink_to_hdf5("../Transpose_data/QC_PASS.CD.1trans.tped", "../Transpose_data/QC_PASS.CD.1trans.tfam", "First_try.h5")
 
