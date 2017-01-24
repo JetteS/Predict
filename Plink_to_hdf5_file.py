@@ -80,7 +80,7 @@ def bed_plink_to_hdf5(genotype_file, out_hdf5_file):
 		phens.append(sample.phenotype)
 				
 	num_individs = len(iids)
-	if sp.any(sp.isnan(true_phens)):
+	if sp.any(sp.isnan(phens)):
 		print('Phenotypes appear to have some NaNs, or perhaps parsing failed?')
 	else:
 		print('%d individuals have phenotype and genotype information.' % num_individs)
