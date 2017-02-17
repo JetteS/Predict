@@ -6,6 +6,7 @@ import h5py
 import random
 import math
 import sys
+import time
 
 ## Load data:
 
@@ -65,23 +66,25 @@ Y = (Y_unnorm-sp.mean(Y_unnorm))/sp.std(Y_unnorm)
 #	hf.create_dataset('Chromosomes', data=Chromosomes)
 
 """
+start_time = time.clock()
+print("Importing the data...")
+
 with h5py.File("Normalized_data.h5","r") as hf:
 	data = hf.get('X')
 	X= sp.array(data)
-	print("Shape of the array genotypes:", X.shape)
 	data = hf.get('Y')
 	Y= sp.array(data)
-	print("Shape of the array phenotypes:", Y.shape)
-
-(N,M) = X.shape
-
 
 with h5py.File("New_try.h5","r") as hf:
-
 	data = hf["Chromosomes"]
 	Chromosomes = sp.array(data)
-	print("Shape of the array Chromosomes:", Chromosomes.shape)
 
+print("Execution time (importing):", time.clock()-start_time,"seconds")
+
+(N,M) = X.shape
+print("Shape of the array genotypes:", X.shape)
+print("Shape of the array phenotypes:", Y.shape)
+print("Shape of the array Chromosomes:", Chromosomes.shape)
 
 ##---------------------------------------------------------
 ## Conjugate gradient iteration 
@@ -161,6 +164,7 @@ def evalfREML(logDelta,MCtrials,X,Y,beta_rand,e_rand_unscaled):
 		## compute BLUP estimated SNP effect sizes and residuals
 		beta_hat_rand[:,t] = 1/M*sp.dot(X.T,H_inv_y_rand[:,t])
 		e_hat_rand[:,t] = delta*H_inv_y_rand[:,t]
+		print("Iteration %d completed..." % t)
 
 	## compute BLUP estimated SNP effect sizes and residuals for real phenotypes
 	H_inv_y_data = conjugateGradientSolve(A=H,x0=x0,b=Y)
@@ -172,9 +176,9 @@ def evalfREML(logDelta,MCtrials,X,Y,beta_rand,e_rand_unscaled):
 	return(f)
 
 
-## set number of Monte Carlo trials
+## Set the number of Monte Carlo trials
 MCtrials = max(min(4e9/(N**2),15),3)
-print("MCtrials:", MCtrials)
+print("The number of MC trials is:", MCtrials)
 
 beta_rand = sp.empty((M,MCtrials))
 e_rand_unscaled = sp.empty((N,MCtrials))
@@ -189,18 +193,26 @@ for t in range(0,MCtrials):
 
 h12 = 0.25
 logDelta = [sp.log((1-h12)/h12)]
+
 ## Perform first fREML evaluation
+print("Performing the first fREML evaluation...")
+start_time = time.clock()
 f = [evalfREML(logDelta=logDelta[0],MCtrials=MCtrials,X=X,Y=Y,beta_rand=beta_rand,e_rand_unscaled=e_rand_unscaled)]
+print("Execution time (first fREML):", time.clock()-start_time,"seconds")
+
 if f[0]<0:
 	h22=0.125
 else:
 	h22=0.5
 
-print("h22:", h22)
-
 logDelta.append(sp.log((1-h22)/h22))
+
 ## Perform second fREML evaluation
+print("Performing the second fREML evaluation...")
+start_time = time.clock()
 f.append(evalfREML(logDelta=logDelta[1],MCtrials=MCtrials,X=X,Y=Y,beta_rand=beta_rand,e_rand_unscaled=e_rand_unscaled))
+print("Execution time (second fREML):", time.clock()-start_time,"seconds")
+
 ## Perform up to 5 steps of secant iteration
 for s in range(2,7):
 	logDelta.append((logDelta[s-2]*f[s-1]-logDelta[s-1]*f[s-2])/(f[s-1]-f[s-2]))
@@ -208,6 +220,7 @@ for s in range(2,7):
 	if abs(logDelta[s]-logDelta[s-1])<0.01:
 		break
 	f.append(evalfREML(logDelta=logDelta[s],MCtrials=MCtrials,X=X,Y=Y,beta_rand=beta_rand,e_rand_unscaled=e_rand_unscaled))
+	print("Iteration %d of the secant iteration has been completed successfully." % s)
 
 delta = sp.exp(logDelta[-1])
 print("Delta:",delta)
