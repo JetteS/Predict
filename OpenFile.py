@@ -66,7 +66,7 @@ Y = (Y_unnorm-sp.mean(Y_unnorm))/sp.std(Y_unnorm)
 #	hf.create_dataset('Chromosomes', data=Chromosomes)
 
 """
-start_time = time.clock()
+start_time = time.time()
 print("Importing the data...")
 
 with h5py.File("Normalized_data.h5","r") as hf:
@@ -79,12 +79,14 @@ with h5py.File("New_try.h5","r") as hf:
 	data = hf["Chromosomes"]
 	Chromosomes = sp.array(data)
 
-print("Execution time (importing):", time.clock()-start_time,"seconds")
+print("Execution time (importing):", round(time.time()-start_time,2),"seconds")
 
 (N,M) = X.shape
 print("Shape of the array genotypes:", X.shape)
 print("Shape of the array phenotypes:", Y.shape)
 print("Shape of the array Chromosomes:", Chromosomes.shape)
+
+## Step 1a : Estimate variance parameters
 
 ##---------------------------------------------------------
 ## Conjugate gradient iteration 
@@ -126,6 +128,55 @@ def conjugateGradientSolve(A,x0,b):
 
 
 ##---------------------------------------------------------
+## Conjugate gradient iteration ()
+##---------------------------------------------------------
+## Name: FASTconjugateGradientSolve
+## Purpose: Solving an equation of the form
+##              Ax=b
+## 			(where A is of the form XX'/M + d*I)
+##          by the aid of conjugate gradient iteration.
+##			Due to the composition of A, we have that
+## 			Ax= (XX'/M + d*I)x= (1/M)*XX'x + d*x.
+##			This expression can be calculated 
+##        	much more efficient as the calculation
+## 			needs less CPU time and memory.
+## Input: 
+## X = NxM matrix
+## b = N-vector
+## x0 = M-vector, the initial value of x
+## c1,c2 = a real scalar
+## Output:
+## x
+##---------------------------------------------------------
+
+def FASTconjugateGradientSolve(X,x0,b,c1=1,c2=1):
+	M= X.shape[1]
+	x = x0
+	r = b-(sp.dot(X,sp.dot(X.T,x))*float(c1)/float(M) + float(c2)*x)
+	p=r
+	rsold = sp.dot(r,r)
+	norm = sp.sqrt(rsold)
+	while norm>0.0005:
+		Ap = (sp.dot(X,sp.dot(X.T,p))*float(c1)/float(M) + float(c2)*p)
+		## alpha = step size
+    	## alpha = t(r_{k-1})*r_{k-1}/(t(p_k)*A*p_k)
+		alpha = rsold/(sp.dot(p,Ap))
+		## x_k = x_{k-1} + alpha*p_k
+		x = x+alpha*p
+		## r_k = r_{k-1}-alpha*A*p_k
+		r = r-alpha*Ap
+		rsnew = sp.dot(r,r)
+		## beta = t(r_{k-1})*r_{k-1}/(t(r_{k-2})*r_{k-2})
+		## p = search direction
+		## p_k = r_{k-1} + beta*p_{k-1}
+		p = r+(rsnew/rsold)*p
+		norm = sp.sqrt(rsnew)
+		rsold = rsnew
+	return(x)
+
+
+
+##---------------------------------------------------------
 ## Compute f_{REML}(log(delta)) 
 ##---------------------------------------------------------
 ## Name: evalfREML
@@ -153,52 +204,46 @@ def evalfREML(logDelta,MCtrials,X,Y,beta_rand,e_rand_unscaled):
 	beta_hat_rand = sp.empty((M,MCtrials))
 	e_hat_rand = sp.empty((N,MCtrials))
 
-	## Calculating the matrix H=X%*%t(X)/M + delta*I_N
-	H = sp.dot(X,X.T)/M + delta*sp.identity(N)
+	## Defining the initial vector x0
 	x0 = sp.zeros(N)
 	for t in range(0,MCtrials):
 		## build random phenotypes using pre-generated components
 		y_rand[:,t] = sp.dot(X,beta_rand[:,t])+sp.sqrt(delta)*e_rand_unscaled[:,t]
 		## compute H^(-1)%*%y.rand[,t] by the aid of conjugate gradient iteration
-		H_inv_y_rand[:,t] = conjugateGradientSolve(A=H,x0=x0,b=y_rand[:,t])
+		H_inv_y_rand[:,t] = FASTconjugateGradientSolve(X=X,x0=x0,b=y_rand[:,t],c2=delta)
 		## compute BLUP estimated SNP effect sizes and residuals
-		beta_hat_rand[:,t] = 1/M*sp.dot(X.T,H_inv_y_rand[:,t])
-		e_hat_rand[:,t] = delta*H_inv_y_rand[:,t]
-		print("Iteration %d completed..." % t)
+		beta_hat_rand[:,t] = sp.dot(X.T,H_inv_y_rand[:,t])
+		e_hat_rand[:,t] = H_inv_y_rand[:,t]
+		print("In evalfREML: Iteration %d has been completed..." % t)
 
 	## compute BLUP estimated SNP effect sizes and residuals for real phenotypes
-	H_inv_y_data = conjugateGradientSolve(A=H,x0=x0,b=Y)
-	beta_hat_data = 1/M*sp.dot(X.T,H_inv_y_data)
-	e_hat_data = delta*H_inv_y_data
+	e_hat_data = FASTconjugateGradientSolve(X=X,x0=x0,b=Y,c2=delta)
+	beta_hat_data = sp.dot(X.T,e_hat_data )
 	
 	## evaluate f_REML
 	f = sp.log((sp.sum(beta_hat_data**2)/sp.sum(e_hat_data**2))/(sp.sum(beta_hat_rand**2)/sp.sum(e_hat_rand**2)))
 	return(f)
 
+print("Step 1a : Estimate variance parameters...")
+step = time.time()
 
 ## Set the number of Monte Carlo trials
 MCtrials = max(min(4e9/(N**2),15),3)
 print("The number of MC trials is:", MCtrials)
 
-beta_rand = sp.empty((M,MCtrials))
-e_rand_unscaled = sp.empty((N,MCtrials))
-
-for t in range(0,MCtrials):
-	for j in range(0,M):
-		## generate random SNP effects
-		beta_rand[j,t]  = stats.norm.rvs(0,1,size=1)*sp.sqrt(1/M)
-	for i in range(0,N):
-		## generate random environmental effects
-		e_rand_unscaled[i,t] = stats.norm.rvs(0,1,size=1)
+## generate random SNP effects
+beta_rand = stats.norm.rvs(0,1,size=(M,MCtrials))*sp.sqrt(1.0/float(M))
+## generate random environmental effects
+e_rand_unscaled = stats.norm.rvs(0,1,size=(N,MCtrials))
 
 h12 = 0.25
 logDelta = [sp.log((1-h12)/h12)]
 
 ## Perform first fREML evaluation
 print("Performing the first fREML evaluation...")
-start_time = time.clock()
+start_time = time.time()
 f = [evalfREML(logDelta=logDelta[0],MCtrials=MCtrials,X=X,Y=Y,beta_rand=beta_rand,e_rand_unscaled=e_rand_unscaled)]
-print("Execution time (first fREML):", time.clock()-start_time,"seconds")
+print("Execution time (first fREML):", round(time.time()-start_time,2),"seconds")
 
 if f[0]<0:
 	h22=0.125
@@ -209,44 +254,54 @@ logDelta.append(sp.log((1-h22)/h22))
 
 ## Perform second fREML evaluation
 print("Performing the second fREML evaluation...")
-start_time = time.clock()
+start_time = time.time()
 f.append(evalfREML(logDelta=logDelta[1],MCtrials=MCtrials,X=X,Y=Y,beta_rand=beta_rand,e_rand_unscaled=e_rand_unscaled))
-print("Execution time (second fREML):", time.clock()-start_time,"seconds")
+print("Execution time (second fREML):", round(time.time()-start_time,2),"seconds")
 
 ## Perform up to 5 steps of secant iteration
+print("Performing up to 5 steps of secant iteration...")
 for s in range(2,7):
 	logDelta.append((logDelta[s-2]*f[s-1]-logDelta[s-1]*f[s-2])/(f[s-1]-f[s-2]))
 	## check convergence
 	if abs(logDelta[s]-logDelta[s-1])<0.01:
 		break
 	f.append(evalfREML(logDelta=logDelta[s],MCtrials=MCtrials,X=X,Y=Y,beta_rand=beta_rand,e_rand_unscaled=e_rand_unscaled))
-	print("Iteration %d of the secant iteration has been completed successfully." % s)
+	print("Iteration %d has been completed successfully." % (s-1))
 
 delta = sp.exp(logDelta[-1])
-print("Delta:",delta)
+print("The final delta:",delta) # 0.17609251449105767
 
 x0 = sp.zeros(N)
-H = sp.dot(X,X.T)/M + delta*sp.identity(N)
-H_inv_y_data = conjugateGradientSolve(A=H,x0=x0,b=Y)
+H_inv_y_data = FASTconjugateGradientSolve(X=X,x0=x0,b=Y,c2=delta)
 
-sigma_g = sp.dot(Y,H_inv_y_data)/N
+sigma_g = sp.dot(Y,H_inv_y_data)/float(N)
 sigma_e = delta*sigma_g
-print("sigma.g=",sigma_g)
-print("sigma.e=",sigma_e)
+print("sigma.g=",sigma_g) # 0.80200006131763968
+print("sigma.e=",sigma_e) # 0.14122620741940561
 
+print("Step 1a took", round((time.time()-step)/60,2),"minutes")
+
+"""
+sigma_g = 0.80200006131763968
+sigma_e = 0.14122620741940561
+print("sigma.g=",sigma_g) # 0.80200006131763968
+print("sigma.e=",sigma_e) # 0.14122620741940561
+
+x0 = sp.zeros(N)
+"""
 ## Step 1b : Compute and calibrate BOLT-LMM-inf statistics
+print("Step 1b : Compute and calibrate BOLT-LMM-inf statistics...")
+step = time.time()
 
 ## precompute V_{-chr}^{-1}*Y, where 
 ## V_{-chr}= sigma.g^2*X_{-chr}*t(X_{-chr})/M_{-chr} + sigma.e^2*I_N
 
-V_chr_inv_Y = sp.empty((N,22))
+V_chr_inv_Y = sp.empty((N,25))
 
-for chrom in range(1,23):
+for chrom in range(1,26):
 	chrom_index = sp.array(Chromosomes != chrom)
 	X_chr = X[:,chrom_index]
-
-	V_chr = sigma_g/X_chr.shape[1]*sp.dot(X_chr,X_chr.T) + sigma_e*sp.identity(N)
-	V_chr_inv_Y[:,chrom-1] = conjugateGradientSolve(A=V_chr,x0=x0,b=Y)
+	V_chr_inv_Y[:,chrom-1] = FASTconjugateGradientSolve(X=X_chr,x0=x0,b=Y,c1=sigma_g,c2=sigma_e)
 
 ## Compute calibration for BOL-LMM-inf statistic using 30 random SNPs
 
@@ -264,11 +319,10 @@ for t in range(0,30):
 	chrom_index = sp.array(Chromosomes != chrom)
 	## X_{-chr}
 	X_chr = X[:,chrom_index]
-	V_chr = sigma_g/X_chr.shape[1]*sp.dot(X_chr,X_chr.T) + sigma_e*sp.identity(N)
-	V_chr_inv_x = conjugateGradientSolve(A=V_chr,x0=x0,b=x)
+	V_chr_inv_x = FASTconjugateGradientSolve(X=X_chr,x0=x0,b=x,c1=sigma_g,c2=sigma_e)
 
 	prospectiveStat[t] = sp.dot(x,V_chr_inv_Y[:,chrom-1])**2/sp.dot(x,V_chr_inv_x)
-	uncalibratedRetrospectiveStat[t] = N*sp.dot(x,V_chr_inv_Y[:,chrom-1])**2/(sp.sum(x**2)*sp.sum(V_chr_inv_Y[:,chrom-1]**2))
+	uncalibratedRetrospectiveStat[t] = float(N)*sp.dot(x,V_chr_inv_Y[:,chrom-1])**2/(sp.sum(x**2)*sp.sum(V_chr_inv_Y[:,chrom-1]**2))
 
 infStatCalibration = sp.sum(uncalibratedRetrospectiveStat)/sp.sum(prospectiveStat)
 print("infStatCalibration:", infStatCalibration)
@@ -281,8 +335,9 @@ for m in range(0,M):
 	x = X[:,m]
 	## Chromosome containing SNP m
 	chrom = Chromosomes[m]
-	boltLMMinf[m] = N*sp.dot(x,V_chr_inv_Y[:,chrom-1])**2/(sp.sum(x**2)*sp.sum(V_chr_inv_Y[:,chrom-1]**2))/infStatCalibration
+	boltLMMinf[m] = float(N)*sp.dot(x,V_chr_inv_Y[:,chrom-1])**2/(sp.sum(x**2)*sp.sum(V_chr_inv_Y[:,chrom-1]**2))/infStatCalibration
 
+print("Step 1b took", round((time.time()-step)/60,2),"minutes")
 
 ## Step 2a: Estimate Gaussian mixture prior parameters
 
@@ -314,8 +369,8 @@ for m in range(0,M):
 def fitVariationalBayes(X,Y,sigma_g,sigma_e,f2,p,maxIters=250):
 	(N,M) = X.shape
 	## Set Gaussian variances
-	sigma_beta = [sigma_g/M *(1-f2)/p]
-	sigma_beta.append(sigma_g/M*f2/(1-p))
+	sigma_beta = [sigma_g/float(M) *(1-f2)/p]
+	sigma_beta.append(sigma_g/float(M)*f2/(1-p))
 	## Initialize SNP effect estimates to 0
 	beta_fit = sp.zeros(M)
 	## Initialize residual phenotype to Y
@@ -325,7 +380,7 @@ def fitVariationalBayes(X,Y,sigma_g,sigma_e,f2,p,maxIters=250):
 	## Perform VB iterations until convergence or maxIters
 	for k in range(maxIters):
 		approxLLprev = approxLL
-		approxLL = -N/2*math.log(2*math.pi*sigma_e)
+		approxLL = -float(N)/2.0*math.log(2*math.pi*sigma_e)
 		## Update SNP effect estimates in turn and accumulate 
 		## contributions to approxLL
 		for m in range(M):
@@ -359,6 +414,9 @@ def fitVariationalBayes(X,Y,sigma_g,sigma_e,f2,p,maxIters=250):
 	l = [beta_fit,y_resid]
 	return(l)
 
+
+print("Step 2a: Estimate Gaussian mixture prior parameters...")
+step = time.time()
 
 ## Algorithm: Optimize prediction mean-squared error in cross-validation
 
@@ -401,4 +459,4 @@ p = p_vec[min_index_1]
 print("f2:",f2)
 print("p:",p)
 
- 
+print("Step 2a took", round((time.time()-step)/60,2),"minutes")
