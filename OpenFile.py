@@ -72,7 +72,6 @@ print("Importing the data...")
 with h5py.File("Normalized_data.h5","r") as hf:
 	data = hf.get('X')
 	X= sp.array(data, dtype= "single")
-	print(type(X) is single)
 	data = hf.get('Y')
 	Y= sp.array(data, dtype= "single")
 
