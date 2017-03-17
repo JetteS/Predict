@@ -71,13 +71,14 @@ print("Importing the data...")
 
 with h5py.File("Normalized_data.h5","r") as hf:
 	data = hf.get('X')
-	X= sp.array(data)
+	X= sp.array(data, dtype= "single")
+	print(type(X) is single)
 	data = hf.get('Y')
-	Y= sp.array(data)
+	Y= sp.array(data, dtype= "single")
 
 with h5py.File("New_try.h5","r") as hf:
 	data = hf["Chromosomes"]
-	Chromosomes = sp.array(data)
+	Chromosomes = sp.array(data, dtype= "single")
 
 print("Execution time (importing):", round(time.time()-start_time,2),"seconds")
 
@@ -198,14 +199,14 @@ def FASTconjugateGradientSolve(X,x0,b,c1=1,c2=1):
 def evalfREML(logDelta,MCtrials,X,Y,beta_rand,e_rand_unscaled):
 
 	(N,M) = X.shape
-	delta = sp.exp(logDelta)
-	y_rand = sp.empty((N,MCtrials))
-	H_inv_y_rand = sp.empty((N,MCtrials))
-	beta_hat_rand = sp.empty((M,MCtrials))
-	e_hat_rand = sp.empty((N,MCtrials))
+	delta = sp.exp(logDelta, dtype= "single")
+	y_rand = sp.empty((N,MCtrials), dtype= "single")
+	H_inv_y_rand = sp.empty((N,MCtrials), dtype= "single")
+	beta_hat_rand = sp.empty((M,MCtrials), dtype= "single")
+	e_hat_rand = sp.empty((N,MCtrials), dtype= "single")
 
 	## Defining the initial vector x0
-	x0 = sp.zeros(N)
+	x0 = sp.zeros(N, dtype= "single")
 	for t in range(0,MCtrials):
 		## build random phenotypes using pre-generated components
 		y_rand[:,t] = sp.dot(X,beta_rand[:,t])+sp.sqrt(delta)*e_rand_unscaled[:,t]
@@ -224,6 +225,7 @@ def evalfREML(logDelta,MCtrials,X,Y,beta_rand,e_rand_unscaled):
 	f = sp.log((sp.sum(beta_hat_data**2)/sp.sum(e_hat_data**2))/(sp.sum(beta_hat_rand**2)/sp.sum(e_hat_rand**2)))
 	return(f)
 
+
 print("Step 1a : Estimate variance parameters...")
 step = time.time()
 
@@ -233,8 +235,10 @@ print("The number of MC trials is:", MCtrials)
 
 ## generate random SNP effects
 beta_rand = stats.norm.rvs(0,1,size=(M,MCtrials))*sp.sqrt(1.0/float(M))
+beta_rand.astype(dtype="single")
 ## generate random environmental effects
 e_rand_unscaled = stats.norm.rvs(0,1,size=(N,MCtrials))
+e_rand_unscaled.astype(dtype="single")
 
 h12 = 0.25
 logDelta = [sp.log((1-h12)/h12)]
@@ -271,7 +275,7 @@ for s in range(2,7):
 delta = sp.exp(logDelta[-1])
 print("The final delta:",delta) # 0.17609251449105767
 
-x0 = sp.zeros(N)
+x0 = sp.zeros(N, dtype= "single")
 H_inv_y_data = FASTconjugateGradientSolve(X=X,x0=x0,b=Y,c2=delta)
 
 sigma_g = sp.dot(Y,H_inv_y_data)/float(N)
@@ -282,8 +286,8 @@ print("sigma.e=",sigma_e) # 0.14122620741940561
 print("Step 1a took", round((time.time()-step)/60,2),"minutes")
 
 """
-sigma_g = 0.80200006131763968
-sigma_e = 0.14122620741940561
+sigma_g = 0.80200006131763968 #0.80366656315376572
+sigma_e = 0.14122620741940561 # 0.14008623371097639
 print("sigma.g=",sigma_g) # 0.80200006131763968
 print("sigma.e=",sigma_e) # 0.14122620741940561
 
