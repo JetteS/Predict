@@ -8,7 +8,7 @@ import math
 import sys
 import time
 
-# # Load data:
+## Load data:
 
 """
 with h5py.File("New_try.h5","r") as hf:
@@ -173,39 +173,6 @@ def FASTconjugateGradientSolve(X, x0, b, c1=1, c2=1):
 		norm = sp.sqrt(rsnew)
 		rsold = rsnew
 	return(x)
-
-
-def FASTconjugateGradientSolve(hf, x0, b, c1=1, c2=1, chunk_size=10000):
-
-	N, M = hf['X'].shape
-	x = x0
-
-	Xtx = sp.zeros(N)
-	for chunk_i in range(0, M, chunk_size):
-		X_chunk = hf['X'][chunk_i: chunk_i + chunk_size]
-		Xtx += sp.dot(X_chunk.T, x)
-	r = b - (sp.dot(X, sp.dot(X.T, x)) * float(c1) / float(M) + float(c2) * x)
-	p = r
-	rsold = sp.dot(r, r)
-	norm = sp.sqrt(rsold)
-	while norm > 0.0005:
-		Ap = (sp.dot(X, sp.dot(X.T, p)) * float(c1) / float(M) + float(c2) * p)
-		# # alpha = step size
-    	# # alpha = t(r_{k-1})*r_{k-1}/(t(p_k)*A*p_k)
-		alpha = rsold / (sp.dot(p, Ap))
-		# # x_k = x_{k-1} + alpha*p_k
-		x = x + alpha * p
-		# # r_k = r_{k-1}-alpha*A*p_k
-		r = r - alpha * Ap
-		rsnew = sp.dot(r, r)
-		# # beta = t(r_{k-1})*r_{k-1}/(t(r_{k-2})*r_{k-2})
-		# # p = search direction
-		# # p_k = r_{k-1} + beta*p_{k-1}
-		p = r + (rsnew / rsold) * p
-		norm = sp.sqrt(rsnew)
-		rsold = rsnew
-	return(x)
-
 
 ##---------------------------------------------------------
 # # Compute f_{REML}(log(delta))
