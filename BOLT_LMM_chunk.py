@@ -1,3 +1,8 @@
+##################################################################################
+##################################################################################
+## Implementation of BOLT-LMM 
+##################################################################################
+##################################################################################
 import scipy as sp 
 from scipy import stats
 import numpy as np
@@ -8,25 +13,11 @@ import math
 import sys
 import time
 
-start_time = time.time()
-print("Importing the phenotypes and the chromosome numbers...")
-
-with h5py.File("Normalized_data.h5","r") as hf:
-	data = hf.get('Y')
-	Y= sp.array(data, dtype= "single")
-
-with h5py.File("New_try.h5","r") as hf:
-	data = hf["Chromosomes"]
-	Chromosomes = sp.array(data, dtype= "single")
-
-print("Execution time (importing):", round(time.time()-start_time,2),"seconds")
-print("Shape of the array phenotypes:", Y.shape)
-print("Shape of the array Chromosomes:", Chromosomes.shape)
-
-N= Y.shape[0]
-M= Chromosomes.shape[0]
-
-## Step 1a : Estimate variance parameters
+##################################################################################
+##################################################################################
+## Functions used 
+##################################################################################
+##################################################################################
 
 ##---------------------------------------------------------
 ## Conjugate gradient iteration (in chunks)
@@ -38,23 +29,20 @@ M= Chromosomes.shape[0]
 ##          by the aid of conjugate gradient iteration.
 ##			Due to the composition of A, we have that
 ## 			Ax= (XX'/M + d*I)x= (1/M)*XX'x + d*x.
-##			This expression can be calculated 
-##        	much more efficient as the calculation
-## 			needs less CPU time and memory.
 ## Input: 
 ## hf = a string specifying the hdf5-file that 
-## 		includes the normalized genotype matrix X
+## 		contains the normalized genotype matrix X
 ## 		(NxM-matrix)
 ## b = N-vector
 ## x0 = N-vector, the initial value of x
-## c1,c2 = real scalars
+## c1,c2 = real scalars (by default c1,c2=1)
 ## chunk_size = the size of the chunks that should be 
-## 				used (default = 1000)
+## 				used (default = 3000)
 ## Output:
 ## x
 ##---------------------------------------------------------
 
-def conjugateGradientSolveChunks(hf,x0,b,c1=1,c2=1, chunk_size=1000):
+def conjugateGradientSolveChunks(hf,x0,b,c1=1,c2=1,chunk_size=3000):
 
 	(N,M)= h5py.File(hf, "r")['X'].shape
 	x = x0
@@ -73,6 +61,7 @@ def conjugateGradientSolveChunks(hf,x0,b,c1=1,c2=1, chunk_size=1000):
 	p=r
 	rsold = sp.dot(r,r)
 	norm = sp.sqrt(rsold)
+
 	while norm>0.0005:
 
 		XTx = sp.zeros(M, dtype="single")
@@ -121,12 +110,12 @@ def conjugateGradientSolveChunks(hf,x0,b,c1=1,c2=1, chunk_size=1000):
 ## beta_rand = random SNP effects
 ## e_rand_unscaled = random environmental effects
 ## chunk_size = the size of the chunks that should be 
-## 				used (default = 1000)
+## 				used (default = 3000)
 ## Output:
 ## The evaluated function, f_{REML}
 ##---------------------------------------------------------
 
-def evalfREML(logDelta,MCtrials,hf,Y,beta_rand,e_rand_unscaled, chunk_size=1000):
+def evalfREML(logDelta,MCtrials,hf,Y,beta_rand,e_rand_unscaled, chunk_size=3000):
 
 	(N,M)= h5py.File(hf, "r")['X'].shape
 	delta = sp.exp(logDelta, dtype= "single")
@@ -154,7 +143,7 @@ def evalfREML(logDelta,MCtrials,hf,Y,beta_rand,e_rand_unscaled, chunk_size=1000)
 			beta_hat_rand[:,t] += sp.dot(X_chunk.T,H_inv_y_rand[chunk:chunk+chunk_size,t])
 
 		e_hat_rand[:,t] = H_inv_y_rand[:,t]
-		#print("In evalfREML: Iteration %d has been completed..." % t)
+		print("In evalfREML: Iteration %d has been completed..." % t)
 
 	## compute BLUP estimated SNP effect sizes and residuals for real phenotypes
 	e_hat_data = conjugateGradientSolveChunks(hf=hf,x0=x0,b=Y,c2=delta, chunk_size=chunk_size)
@@ -168,19 +157,46 @@ def evalfREML(logDelta,MCtrials,hf,Y,beta_rand,e_rand_unscaled, chunk_size=1000)
 	return(f)
 
 
+##################################################################################
+##################################################################################
+## Importing phenotypes and the vector specifying the chromosome for each snp
+##################################################################################
+##################################################################################
+
+start_time = time.time()
+print("Importing phenotypes and chromosomes...")
+
+with h5py.File("Normalized_data.h5","r") as hf:
+	Y= sp.array(hf["Y"], dtype= "single")
+
+with h5py.File("New_try.h5","r") as hf:
+	Chromosomes = sp.array(hf["Chromosomes"], dtype= "single")
+
+#print("Execution time (importing):", round(time.time()-start_time,2),"seconds")
+print("Shape of the array genotypes:", h5py.File("Normalized_data.h5", "r")['X'].shape)
+print("Shape of the array phenotypes:", Y.shape)
+print("Shape of the array Chromosomes:", Chromosomes.shape)
+
+(N,M) = h5py.File("Normalized_data.h5", "r")['X'].shape
+
+
+##################################################################################
+##################################################################################
+## Step 1a : Estimate variance parameters
+##################################################################################
+##################################################################################
+
 print("Step 1a : Estimate variance parameters...")
 step = time.time()
 
 ## Set the number of Monte Carlo trials
 MCtrials = max(min(4e9/(N**2),15),3)
-print("The number of MC trials is:", MCtrials)
+print("The number of MC trials is", MCtrials)
 
-## generate random SNP effects
+## Generate random SNP effects
 beta_rand = stats.norm.rvs(0,1,size=(M,MCtrials))*sp.sqrt(1.0/float(M))
-beta_rand.astype(dtype="single")
-## generate random environmental effects
+## Generate random environmental effects
 e_rand_unscaled = stats.norm.rvs(0,1,size=(N,MCtrials))
-e_rand_unscaled.astype(dtype="single")
 
 h12 = 0.25
 logDelta = [sp.log((1-h12)/h12)]
