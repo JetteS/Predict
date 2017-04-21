@@ -1,4 +1,4 @@
-import scipy as sp 
+import scipy as sp
 from scipy import stats
 import numpy as np
 import multiprocessing as mp
@@ -180,10 +180,11 @@ def FASTconjugateGradientSolve(hf, x0, b, c1=1, c2=1, chunk_size=10000):
 	N, M = hf['X'].shape
 	x = x0
 
-	Xtx = sp.zeros(N)
+	Xtx = sp.zeros(N, dtype='single')
 	for chunk_i in range(0, M, chunk_size):
 		X_chunk = hf['X'][chunk_i: chunk_i + chunk_size]
 		Xtx += sp.dot(X_chunk.T, x)
+
 	r = b - (sp.dot(X, sp.dot(X.T, x)) * float(c1) / float(M) + float(c2) * x)
 	p = r
 	rsold = sp.dot(r, r)
