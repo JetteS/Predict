@@ -36,29 +36,25 @@ import time
 ## x0 = N-vector, the initial value of x
 ## c1,c2 = real scalars (by default c1,c2=1)
 ## chunk_size = the size of the chunks that should be 
-## 				used (default = 3000)
+## 				used (default = 5000)
 ## Output:
 ## x
 ##---------------------------------------------------------
 
-def conjugateGradientSolveChunks(hf,x0,b,c1=1,c2=1,chunk_size=3000):
+def conjugateGradientSolveChunks(hf,x0,b,c1=1,c2=1,chunk_size=5000):
 
 	(N,M)= hf['X'].shape
 	x = x0
-	XTx = sp.zeros(M, dtype="single")
-	XXTx = sp.empty(N, dtype = "single")
+	XTx = sp.empty(M, dtype="single")
+	XXTx = sp.zeros(N, dtype = "single")
 
-	for chunk in range(0,N,chunk_size):
-		print("Chunk:", chunk)
-		X_chunk = sp.array(hf['X'][chunk:chunk+chunk_size], dtype="single")
-		print("X_chunk.shape:", X_chunk.shape)
-		XTx += sp.dot(X_chunk.T,x[chunk:chunk+chunk_size])
+	for chunk in range(0,M,chunk_size):
+		X_chunk = sp.array(hf['X'][:,chunk:chunk+chunk_size], dtype="single")
+		XTx[chunk:chunk+X_chunk.shape[1]] = sp.dot(X_chunk.T,x)
 
-	for chunk in range(0,N,chunk_size):
-		print("Chunk:", chunk)
-		X_chunk = sp.array(hf['X'][chunk:chunk+chunk_size], dtype="single")
-		print("X_chunk.shape:", X_chunk.shape)
-		XXTx[chunk:chunk+X_chunk.shape[0]] = sp.dot(X_chunk,XTx)
+	for chunk in range(0,M,chunk_size):
+		X_chunk = sp.array(hf['X'][:,chunk:chunk+chunk_size], dtype="single")
+		XXTx += sp.dot(X_chunk,XTx[chunk:chunk+chunk_size])
 
 	r = b-(XXTx*float(c1)/float(M) + float(c2)*x)
 	p=r
@@ -69,17 +65,13 @@ def conjugateGradientSolveChunks(hf,x0,b,c1=1,c2=1,chunk_size=3000):
 
 		XTx = sp.zeros(M, dtype="single")
 		XXTx = sp.empty(N, dtype = "single")
-		for chunk in range(0,N,chunk_size):
-			print("Chunk:", chunk)
-			X_chunk = sp.array(hf['X'][chunk:chunk+chunk_size], dtype="single")
-			print("X_chunk.shape:", X_chunk.shape)
-			XTx += sp.dot(X_chunk.T,p[chunk:chunk+chunk_size])
+		for chunk in range(0,M,chunk_size):
+			X_chunk = sp.array(hf['X'][:,chunk:chunk+chunk_size], dtype="single")
+			XTx[chunk:chunk+X_chunk.shape[1]] = sp.dot(X_chunk.T,x)
 
-		for chunk in range(0,N,chunk_size):
-			print("Chunk:", chunk)
-			X_chunk = sp.array(hf['X'][chunk:chunk+chunk_size], dtype="single")
-			print("X_chunk.shape:", X_chunk.shape)
-			XXTx[chunk:chunk+X_chunk.shape[0]] = sp.dot(X_chunk,XTx)
+		for chunk in range(0,M,chunk_size):
+			X_chunk = sp.array(hf['X'][:,chunk:chunk+chunk_size], dtype="single")
+			XXTx += sp.dot(X_chunk,XTx[chunk:chunk+chunk_size])
 
 		Ap = XXTx*float(c1)/float(M) + float(c2)*p
 		## alpha = step size
@@ -122,7 +114,7 @@ def conjugateGradientSolveChunks(hf,x0,b,c1=1,c2=1,chunk_size=3000):
 ## The evaluated function, f_{REML}
 ##---------------------------------------------------------
 
-def evalfREML(logDelta,MCtrials,hf,Y,beta_rand,e_rand_unscaled, chunk_size=3000):
+def evalfREML(logDelta,MCtrials,hf,Y,beta_rand,e_rand_unscaled, chunk_size=5000):
 
 	(N,M)= hf['X'].shape
 	delta = sp.exp(logDelta, dtype= "single")
@@ -135,30 +127,29 @@ def evalfREML(logDelta,MCtrials,hf,Y,beta_rand,e_rand_unscaled, chunk_size=3000)
 	x0 = sp.zeros(N, dtype= "single")
 	for t in range(0,MCtrials):
 
-		Xbeta = sp.empty(N, dtype = "single")
+		Xbeta = sp.zeros(N, dtype = "single")
 		## build random phenotypes using pre-generated components
-		for chunk in range(0,N,chunk_size):
-			X_chunk = sp.array(hf['X'][chunk:chunk+chunk_size], dtype="single")
-			Xbeta[chunk:chunk+X_chunk.shape[0]]= sp.dot(X_chunk, beta_rand[:,t])
+		for chunk in range(0,M,chunk_size):
+			X_chunk = sp.array(hf['X'][:,chunk:chunk+chunk_size], dtype="single")
+			Xbeta += sp.dot(X_chunk, beta_rand[chunk:chunk+chunk_size,t])
 
-		print("First chunk") #############################################################
 		y_rand[:,t] = Xbeta+sp.sqrt(delta)*e_rand_unscaled[:,t]
 		## compute H^(-1)%*%y.rand[,t] by the aid of conjugate gradient iteration
 		H_inv_y_rand[:,t] = conjugateGradientSolveChunks(hf=hf,x0=x0,b=y_rand[:,t],c2=delta, chunk_size=chunk_size)
 		## compute BLUP estimated SNP effect sizes and residuals
-		for chunk in range(0,N,chunk_size):
-			X_chunk = sp.array(hf['X'][chunk:chunk+chunk_size], dtype="single")
-			beta_hat_rand[:,t] += sp.dot(X_chunk.T,H_inv_y_rand[chunk:chunk+chunk_size,t])
+		for chunk in range(0,M,chunk_size):
+			X_chunk = sp.array(hf['X'][:,chunk:chunk+chunk_size], dtype="single")
+			beta_hat_rand[chunk:chunk+X_chunk.shape[0],t] = sp.dot(X_chunk.T,H_inv_y_rand)
 
 		e_hat_rand[:,t] = H_inv_y_rand[:,t]
 		print("In evalfREML: Iteration %d has been completed..." % t)
 
 	## compute BLUP estimated SNP effect sizes and residuals for real phenotypes
 	e_hat_data = conjugateGradientSolveChunks(hf=hf,x0=x0,b=Y,c2=delta, chunk_size=chunk_size)
-	beta_hat_data = sp.zeros(M,dtype="single")
-	for chunk in range(0,N,chunk_size):
-			X_chunk = sp.array(hf['X'][chunk:chunk+chunk_size], dtype="single")
-			beta_hat_data += sp.dot(X_chunk.T,e_hat_data[chunk:chunk+chunk_size])
+	beta_hat_data = sp.empty(M,dtype="single")
+	for chunk in range(0,M,chunk_size):
+			X_chunk = sp.array(hf['X'][:,chunk:chunk+chunk_size], dtype="single")
+			beta_hat_data[chunk:chunk+X_chunk.shape[0]] = sp.dot(X_chunk.T,e_hat_data)
 	
 	## evaluate f_REML
 	f = sp.log((sp.sum(beta_hat_data**2)/sp.sum(e_hat_data**2))/(sp.sum(beta_hat_rand**2)/sp.sum(e_hat_rand**2)))
