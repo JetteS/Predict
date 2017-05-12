@@ -1,4 +1,3 @@
-
 from __future__ import print_function
 import h5py
 import numpy as np
@@ -73,6 +72,7 @@ def bed_plink_to_hdf5(genotype_file, out_hdf5_file, indiv_filter=None):
 	phens = []
 	iids = []
 	fids = []
+
 	
 	for sample in samples:
 		iids.append(sample.iid)
@@ -95,18 +95,20 @@ def bed_plink_to_hdf5(genotype_file, out_hdf5_file, indiv_filter=None):
 	locus_list = plinkf.get_loci()
 	snp_i = 0
 
-	
-	curr_chromosome = 0
-	
+	curr_chromosome = 1
+	print("The current chromosome is Chr", curr_chromosome)
 	for locus, row in izip(locus_list, plinkf):
 		chromosome = locus.chromosome
-		if curr_chromosome == 0:
+		
+		if curr_chromosome == 1:
 			# Initialize data containers
 			sids = []
 			positions = []
 			nts_list = []
 			snps = []
-		elif chromosome != curr_chromosome:
+		if chromosome != curr_chromosome:
+			## Print the current chromosome
+			print("The current chromosome is Chr", chromosome)
 		 	# Store current data in HDF5 file
 		 	chr_group = oh5f.create_group('chr_%d' % curr_chromosome)
 		 	chr_group.create_dataset('sids', data=sids)
@@ -148,6 +150,7 @@ def bed_plink_to_hdf5(genotype_file, out_hdf5_file, indiv_filter=None):
 
 	plinkf.close()
 	oh5f.close()
+	print("The parsing is completed")
 
-# plink_to_hdf5("../Transpose_data/QC_PASS.CD.1trans.tped", "../Transpose_data/QC_PASS.CD.1trans.tfam", "First_try.h5")
 
+#bed_plink_to_hdf5("../risk_prediction/celiac_disease_data/Cel_disease_CC", "H.h5", indiv_filter=None)

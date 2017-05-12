@@ -142,6 +142,7 @@ def evalfREML(logDelta,MCtrials,X,Y,beta_rand,e_rand_unscaled):
 		beta_hat_rand[:,t] = dot(X.T,H_inv_y_rand[:,t])
 		e_hat_rand[:,t] = H_inv_y_rand[:,t]
 		print("In evalfREML: Iteration %d has been completed..." % t)
+		sys.stdout.flush()
 
 	## compute BLUP estimated SNP effect sizes and residuals for real phenotypes
 	e_hat_data = FASTconjugateGradientSolve(X=X,x0=x0,b=Y,c2=delta)
@@ -188,12 +189,12 @@ def fitVariationalBayes(X,Y,sigma_g,sigma_e,f2,p,maxIters=250):
 	## Initialize approximate log likelihood to infinity
 	approxLL = float('inf')
 	## Perform Variational Bayes iterations until convergence or maxIters
-	for k in range(maxIters):
+	for k in range(0,maxIters):
 		approxLLprev = approxLL
 		approxLL = -float(N)/2.0*math.log(2*math.pi*sigma_e)
 		## Update SNP effect estimates in turn and accumulate 
 		## contributions to approxLL
-		for m in range(M):
+		for m in range(0,M):
 			## Extract SNP m
 			x = X[:,m]
 			## Remove effect of SNP m from residual
@@ -203,7 +204,7 @@ def fitVariationalBayes(X,Y,sigma_g,sigma_e,f2,p,maxIters=250):
 
 			s = sigma_beta+sigma_e/spsum(x**2)
 			beta_bar = sigma_beta*beta_hat/(sigma_beta+(sigma_e/spsum(x**2)))
-			tau = sigma_beta*sigma_e/spsum(x**2)/(sigma_beta+(sigma_e/spsum(x**2))) 
+			tau = sigma_beta*sigma_e/spsum(x**2)/(sigma_beta+(sigma_e/spsum(x**2)))
 			pm = (p/sqrt(s[0]))*exp(-beta_hat**2/(2*s[0]))/((p/sqrt(s[0]))*exp(-beta_hat**2/(2*s[0]))+((1-p)/sqrt(s[1]))*exp(-beta_hat**2/(2*s[1])))
 			DKL = pm*log(pm/p) + (1-pm)*log((1-pm)/(1-p))-pm/2*(1+log(tau[0]/sigma_beta[0])-(tau[0]+beta_bar[0]**2)/sigma_beta[0])- (1-pm)/2*(1+log(tau[1]/sigma_beta[1])-(tau[1]+beta_bar[1]**2)/sigma_beta[1])
 
@@ -218,13 +219,12 @@ def fitVariationalBayes(X,Y,sigma_g,sigma_e,f2,p,maxIters=250):
 		approxLL -= spsum(y_resid**2)/(2*sigma_e)
 
 		## Test convergence
-		##print("approxLL-approxLLprev:", approxLL-approxLLprev)
+		#print("approxLL-approxLLprev:", approxLL-approxLLprev)
 		if abs(approxLL-approxLLprev) < 0.01:
 			break
 
 	l = [beta_fit,y_resid]
 	return(l)
-
 
 ##################################################################################
 ##################################################################################
@@ -244,7 +244,7 @@ where = sp.where
 
 ##################################################################################
 ##################################################################################
-## Loading the data
+## Loading the relevant data
 ##################################################################################
 ##################################################################################
 
@@ -253,24 +253,24 @@ with h5py.File("New_try.h5","r") as hf:
 
 	data = hf.get("Chromosomes")
 	#data = hf["Chromosomes"]
-	Chromosomes = sparray(data)
+	Chromosomes = sp.array(data)
 	print("Shape of the array Chromosomes:", Chromosomes.shape)
 	#print(Chromosomes[...])
 
 	Affections = hf["sample_informations"]["Affections"]
-	Y_unnorm = sparray(Affections)
+	Y_unnorm = sp.array(Affections)
 	print("Shape of the array phenotypes:", Y_unnorm.shape)
 	#print(Y_unnorm[...])
 	print("Number of cases:", sum(Y_unnorm))
 	print("Number of controls:", Y_unnorm.shape[0]- sum(Y_unnorm))
 
-	X_unnorm = sparray(hf["chr_1"]["snps"])
+	X_unnorm = sp.array(hf["chr_1"]["snps"])
 	for chrom in range(2,26):
-		snps = sparray(hf["chr_%d" % chrom]["snps"])
+		snps = sp.array(hf["chr_%d" % chrom]["snps"])
 		X_unnorm = sp.concatenate((X_unnorm,snps),axis=0)
 
 		
-	X_unnorm = sparray(X_unnorm)
+	X_unnorm = sp.array(X_unnorm)
 	print("Shape of the array genotypes:", X_unnorm.shape)
 
 
@@ -305,21 +305,24 @@ Y = (Y_unnorm-sp.mean(Y_unnorm))/sp.std(Y_unnorm)
 
 """
 start_time = time.time()
-print("Importing the data...")
+print("Importing parts of the data...")
+sys.stdout.flush()
 
 with h5py.File("Normalized_data.h5","r") as hf:
-	X= sparray(hf['X'], dtype= "single")
-	Y= sparray(hf['Y'], dtype= "single")
+	X= sparray(hf['X'][0::2,0::50], dtype= "single")
+	Y= sparray(hf['Y'][0::2], dtype= "single")
 
 with h5py.File("New_try.h5","r") as hf:
-	Chromosomes = sparray(hf["Chromosomes"], dtype= "single")
+	Chromosomes = sparray(hf["Chromosomes"][0::50], dtype= "single")
 
 print("Execution time (importing):", round(time.time()-start_time,2),"seconds")
+sys.stdout.flush()
 
 (N,M) = X.shape
 print("Shape of the array genotypes:", X.shape)
 print("Shape of the array phenotypes:", Y.shape)
 print("Shape of the array Chromosomes:", Chromosomes.shape)
+sys.stdout.flush()
 
 ##################################################################################
 ##################################################################################
@@ -334,6 +337,7 @@ step = time.time()
 ## Set the number of Monte Carlo trials
 MCtrials = max(min(4e9/(N**2),15),3)
 print("The number of MC trials is:", MCtrials)
+sys.stdout.flush()
 
 ## Generate random SNP effects
 beta_rand = stats.norm.rvs(0,1,size=(M,MCtrials))*sqrt(1.0/float(M))
@@ -366,6 +370,7 @@ sys.stdout.flush()
 start_time = time.time()
 f.append(evalfREML(logDelta=logDelta[1],MCtrials=MCtrials,X=X,Y=Y,beta_rand=beta_rand,e_rand_unscaled=e_rand_unscaled))
 print("Execution time (second fREML):", round(time.time()-start_time,2),"seconds")
+sys.stdout.flush()
 
 ## Perform up to 5 steps of secant iteration
 print("Performing up to 5 steps of secant iteration...")
@@ -381,6 +386,7 @@ for s in range(2,7):
 
 Delta = exp(logDelta[-1])
 print("The final delta:",Delta) # 0.17609251449105767
+sys.stdout.flush()
 
 x0 = zeros(N, dtype= "single")
 H_inv_y_data = FASTconjugateGradientSolve(X=X,x0=x0,b=Y,c2=Delta)
@@ -391,7 +397,6 @@ print("sigma.g=",sigma_g) # 0.80200006131763968
 print("sigma.e=",sigma_e) # 0.14122620741940561
 
 print("Step 1a took", round((time.time()-step)/60,2),"minutes")
-
 
 ##################################################################################
 ##################################################################################
@@ -443,7 +448,7 @@ boltLMMinf = zeros(M)
 #	x = X[:,m]
 #	## Chromosome containing SNP m
 #	chrom = Chromosomes[m]
-#	boltLMMinf[m] = float(N)*dot(x,V_chr_inv_Y[:,chrom-1])**2/(spsum(x**2)*spsum(V_chr_inv_Y[:,chrom-1]**2))/infStatCalibration
+#	boltLMMinf[m] = float(N)*dot(x,V_chr_inv_Y[:,chrom-1])**2/(spsum(x**2)*sp.sum(V_chr_inv_Y[:,chrom-1]**2))/infStatCalibration
 
 for chrom in range(1,26):
 	## Extract all SNPs on chromosome chrom
@@ -501,13 +506,18 @@ sys.stdout.flush()
 ## The index of the minimum:
 i,j = sp.unravel_index(MSE.argmin(), MSE.shape)
 
+#for i in range(3):
+#	for j in range(6):
+#		if MSE[i,j]==MSE.min():
+#			min_index_0 = i
+#			min_index_1 = j
+
 f2 = f2_vec[i]
 p = p_vec[j]
 print("f2:",f2)
 print("p:",p)
 
 print("Step 2a took", round((time.time()-step)/60,2),"minutes")
-
 
 ##################################################################################
 ##################################################################################
@@ -546,3 +556,5 @@ LDscoreCalibration = interceptUncalibratedBoltLMM/interceptBoltLMMinf
 boltLMM = uncalibratedBoltLMM/LDscoreCalibration
 """
 print("Step 2b took", round((time.time()-step)/60,2),"minutes")
+
+

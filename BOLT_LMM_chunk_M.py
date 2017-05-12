@@ -139,10 +139,11 @@ def evalfREML(logDelta,MCtrials,hf,Y,beta_rand,e_rand_unscaled, chunk_size=5000)
 		## compute BLUP estimated SNP effect sizes and residuals
 		for chunk in range(0,M,chunk_size):
 			X_chunk = sp.array(hf['X'][:,chunk:chunk+chunk_size], dtype="single")
-			beta_hat_rand[chunk:chunk+X_chunk.shape[0],t] = sp.dot(X_chunk.T,H_inv_y_rand)
+			beta_hat_rand[chunk:chunk+X_chunk.shape[0],t] = sp.dot(X_chunk.T,H_inv_y_rand[:,t])
 
 		e_hat_rand[:,t] = H_inv_y_rand[:,t]
 		print("In evalfREML: Iteration %d has been completed..." % t)
+		sys.stdout.flush()
 
 	## compute BLUP estimated SNP effect sizes and residuals for real phenotypes
 	e_hat_data = conjugateGradientSolveChunks(hf=hf,x0=x0,b=Y,c2=delta, chunk_size=chunk_size)
@@ -164,7 +165,7 @@ def evalfREML(logDelta,MCtrials,hf,Y,beta_rand,e_rand_unscaled, chunk_size=5000)
 
 start_time = time.time()
 print("Importing phenotypes and chromosomes...")
-
+sys.stdout.flush()
 ## Open the file once:
 hf = h5py.File("Normalized_data.h5", "r")
 ## Importing phenotypes
@@ -177,7 +178,7 @@ with h5py.File("New_try.h5","r") as hf5:
 print("Shape of the array genotypes:", hf['X'].shape)
 print("Shape of the array phenotypes:", Y.shape)
 print("Shape of the array Chromosomes:", Chromosomes.shape)
-
+sys.stdout.flush()
 #(N,M) = h5py.File("Normalized_data.h5", "r")['X'].shape
 (N,M) = hf['X'].shape
 
@@ -189,11 +190,13 @@ print("Shape of the array Chromosomes:", Chromosomes.shape)
 ##################################################################################
 
 print("Step 1a : Estimate variance parameters...")
+sys.stdout.flush()
 step = time.time()
 
 ## Set the number of Monte Carlo trials
 MCtrials = max(min(4e9/(N**2),15),3)
 print("The number of MC trials is", MCtrials)
+sys.stdout.flush()
 
 ## Generate random SNP effects
 beta_rand = stats.norm.rvs(0,1,size=(M,MCtrials))*sp.sqrt(1.0/float(M))
@@ -207,8 +210,21 @@ logDelta = [sp.log((1-h12)/h12)]
 
 ## Perform first fREML evaluation
 print("Performing the first fREML evaluation...")
+sys.stdout.flush()
 start_time = time.time()
 
+##########################################################################
+delta = sp.exp(logDelta[0], dtype= "single")
+## Defining the initial vector x0
+x0 = sp.zeros(N, dtype= "single")
+
+start_time = time.time()
+H_inv_y_rand = conjugateGradientSolveChunks(hf=hf,x0=x0,b=Y,c2=delta,chunk_size=5000)
+print("Execution time (One conjugateGradientSolve):", round(time.time()-start_time,2),"seconds")
+sys.stdout.flush()
+##########################################################################
+
+'''
 f = [evalfREML(logDelta=logDelta[0],MCtrials=MCtrials,hf=hf,Y=Y,beta_rand=beta_rand,e_rand_unscaled=e_rand_unscaled)]
 print("Execution time (first fREML):", round(time.time()-start_time,2),"seconds")
 
@@ -248,3 +264,4 @@ print("sigma.g=",sigma_g) # 0.80200006131763968
 print("sigma.e=",sigma_e) # 0.14122620741940561
 
 print("Step 1a took", round((time.time()-step)/60,2),"minutes")
+'''
