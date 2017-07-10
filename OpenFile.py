@@ -199,11 +199,13 @@ def fitVariationalBayes(X,Y,sigma_g,sigma_e,f2,p,maxIters=250):
 			## Remove effect of SNP m from residual
 			y_resid += beta_fit[m]*x
 			## Formulas in Section 2.1.4
-			beta_hat = dot(x,y_resid)/spsum(x**2)
+			## Due to the fact that all SNPs are normalized, we have that
+			## sp.sum(x**2) = N.
+			beta_hat = dot(x,y_resid)/N
 
-			s = sigma_beta+sigma_e/spsum(x**2)
-			beta_bar = sigma_beta*beta_hat/(sigma_beta+(sigma_e/spsum(x**2)))
-			tau = sigma_beta*sigma_e/spsum(x**2)/(sigma_beta+(sigma_e/spsum(x**2))) 
+			s = sigma_beta+sigma_e/N
+			beta_bar = sigma_beta*beta_hat/(sigma_beta+(sigma_e/N))
+			tau = sigma_beta*sigma_e/N/(sigma_beta+(sigma_e/N)) 
 			pm = (p/sqrt(s[0]))*exp(-beta_hat**2/(2*s[0]))/((p/sqrt(s[0]))*exp(-beta_hat**2/(2*s[0]))+((1-p)/sqrt(s[1]))*exp(-beta_hat**2/(2*s[1])))
 			DKL = pm*log(pm/p) + (1-pm)*log((1-pm)/(1-p))-pm/2*(1+log(tau[0]/sigma_beta[0])-(tau[0]+beta_bar[0]**2)/sigma_beta[0])- (1-pm)/2*(1+log(tau[1]/sigma_beta[1])-(tau[1]+beta_bar[1]**2)/sigma_beta[1])
 
@@ -211,7 +213,7 @@ def fitVariationalBayes(X,Y,sigma_g,sigma_e,f2,p,maxIters=250):
 			## Set effect size to conditional posterior mean
 			beta_fit[m] = pm*beta_bar[0]+(1-pm)*beta_bar[1]
 			## Update approxxLL (as in Section 2.1.4)
-			approxLL -=(spsum(x**2)/(2*sigma_e)*var_beta + DKL)
+			approxLL -=(N/(2*sigma_e)*var_beta + DKL)
 			## Update residual with new effect of SNP m
 			y_resid -= beta_fit[m]*x
 
@@ -251,26 +253,23 @@ where = sp.where
 """
 with h5py.File("New_try.h5","r") as hf:
 
-	data = hf.get("Chromosomes")
-	#data = hf["Chromosomes"]
-	Chromosomes = sparray(data)
+	data = hf["Chromosomes"]
+	Chromosomes = sparray(data, dtype="single")
 	print("Shape of the array Chromosomes:", Chromosomes.shape)
 	#print(Chromosomes[...])
 
 	Affections = hf["sample_informations"]["Affections"]
-	Y_unnorm = sparray(Affections)
+	Y_unnorm = sparray(Affections, dtype="single")
 	print("Shape of the array phenotypes:", Y_unnorm.shape)
 	#print(Y_unnorm[...])
 	print("Number of cases:", sum(Y_unnorm))
 	print("Number of controls:", Y_unnorm.shape[0]- sum(Y_unnorm))
 
-	X_unnorm = sparray(hf["chr_1"]["snps"])
+	X_unnorm = sparray(hf["chr_1"]["snps"], dtype="single")
 	for chrom in range(2,26):
-		snps = sparray(hf["chr_%d" % chrom]["snps"])
+		snps = sparray(hf["chr_%d" % chrom]["snps"],dtype="single")
 		X_unnorm = sp.concatenate((X_unnorm,snps),axis=0)
-
-		
-	X_unnorm = sparray(X_unnorm)
+	
 	print("Shape of the array genotypes:", X_unnorm.shape)
 
 
@@ -524,7 +523,7 @@ sys.stdout.flush()
 step = time.time()
 
 ## Compute uncalibrated BOLT-LMM statistics
-uncalibratedBoltLMM = zeros(M, dtype = "single")
+uncalibratedBoltLMM = zeros((M,1), dtype = "single")
 ## Leave-one-chromosome-out (LOCO) to avoid proximal contamination
 for chrom in range(0,26):
 	X_chr = X[:, Chromosomes!=chrom]
@@ -536,6 +535,7 @@ for chrom in range(0,26):
 	for snp in where(Chromosomes == chrom):
 		uncalibratedBoltLMM[snp] = N*dot(X[:,snp],y_resid)**2/(spsum(X[:,snp]**2)*spsum(y_resid**2))
 
+	print("Chromosome:", chrom)
 """
 ## Calibrate BOLT-LMM statistics using LD Score
 interceptBoltLMMinf = LDscoreIntercept(boltLMMinf)
